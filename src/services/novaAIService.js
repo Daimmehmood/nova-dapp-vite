@@ -1,11 +1,12 @@
 // src/services/novaAIService.js
+
 /**
  * Enhanced Nova AI Service
  * This service handles the integration of OpenAI with our crypto analysis
  * for advanced AI-driven insights in the Nova character
  */
 
-import { OPENAI_API_KEY } from '../config/constants';
+import OPENAI_CONFIG from '../config/openaiConfig';
 import { getComprehensiveTokenAnalysis, getTechnicalIndicators } from './cryptoApiService';
 import { getQuickTokenSummary } from './aiAnalysisService';
 import { detectContractAddress } from '../utils/aiUtils';
@@ -68,7 +69,7 @@ export const processNovaEnhancedMessage = async (userMessage, chatHistory = []) 
  */
 const processWithStandardAI = async (userMessage, chatHistory = [], isFallback = false) => {
   // Check if OpenAI API key is available
-  if (!OPENAI_API_KEY) {
+  if (!OPENAI_CONFIG.apiKey) {
     console.warn('OpenAI API key not available, using fallback');
     return getDefaultResponse(userMessage);
   }
@@ -84,35 +85,11 @@ const processWithStandardAI = async (userMessage, chatHistory = [], isFallback =
       { role: "user", content: userMessage }
     ];
     
-    // Make the API request
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${OPENAI_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: "gpt-3.5-turbo", // Can use gpt-4 if available
-        messages: messages,
-        temperature: NOVA_CONFIG.aiTemperature,
-        max_tokens: 700
-      })
+    // Use the configuration to make the API request
+    const data = await OPENAI_CONFIG.createChatCompletion(messages, {
+      temperature: NOVA_CONFIG.aiTemperature,
+      maxTokens: 700
     });
-
-    // Check for HTTP errors
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('OpenAI API HTTP error:', response.status, errorText);
-      throw new Error(`HTTP error ${response.status}: ${errorText}`);
-    }
-
-    const data = await response.json();
-    
-    // Check for errors in the response
-    if (data.error) {
-      console.error('OpenAI API error details:', JSON.stringify(data.error, null, 2));
-      throw new Error(data.error.message || 'Unknown API error');
-    }
 
     // Return the AI response
     return data.choices[0].message.content;
@@ -170,7 +147,16 @@ const processCryptoAnalysisRequest = async (userMessage, token, chatHistory = []
     const detailedPrompt = generateAnalysisUserPrompt(analysisType, formattedData, userMessage);
     
     // Get the detailed analysis from OpenAI
-    const detailedAnalysis = await getAIAnalysis(systemPrompt, detailedPrompt);
+    const aiResponse = await OPENAI_CONFIG.createChatCompletion([
+      { role: "system", content: systemPrompt },
+      { role: "user", content: detailedPrompt }
+    ], {
+      temperature: 0.2,
+      maxTokens: 1500
+    });
+    
+    // Extract the text response
+    const detailedAnalysis = aiResponse.choices[0].message.content;
     
     // Combine the summary and detailed analysis
     return {
@@ -208,23 +194,49 @@ const processCryptoAnalysisRequest = async (userMessage, token, chatHistory = []
  * @param {Array} chatHistory - Previous chat history
  * @returns {Promise<Object>} - Contract analysis response
  */
+// src/services/novaAIService.js - update the processContractAnalysis function
+
 const processContractAnalysis = async (userMessage, contractAddresses, chatHistory = []) => {
   try {
     // Get the blockchain and first address
     const blockchain = Object.keys(contractAddresses)[0];
     const address = contractAddresses[blockchain][0];
     
-    // Try to get token data from DEX Screener
+    console.log(`Analyzing contract: ${address} on ${blockchain}`);
+    
+    // Try to get comprehensive token data from multiple sources
     const dexData = await getComprehensiveTokenAnalysis(address);
     
-    // Generate system prompt focused on contract analysis
-    const systemPrompt = `You are Nova, an advanced cryptocurrency analyst AI that specializes in blockchain contract analysis. You provide objective, data-driven insights about smart contracts, tokens, and blockchain assets. Focus on security aspects, liquidity, trading patterns, and technical metrics. Avoid making price predictions or giving specific investment advice.`;
+    // Also try to get additional on-chain data if available
+    let onChainData = null;
+    try {
+      // This would be a call to a blockchain explorer API or similar service
+      // You would need to implement this function
+      onChainData = await getTokenOnChainData(address, blockchain);
+    } catch (err) {
+      console.log("On-chain data fetch failed:", err.message);
+      // Continue without on-chain data
+    }
     
-    // Generate user prompt with contract data
-    const userPrompt = `
-Please analyze the following contract address on ${blockchain}:
+    // Generate system prompt focused on token analysis from contract
+    const systemPrompt = `You are Nova, an advanced cryptocurrency analyst AI that specializes in token analysis from blockchain contract addresses. Your task is to provide comprehensive, data-driven insights about tokens based on their contract information. Focus on presenting detailed token metrics in a structured, organized format. Include token basics, supply metrics, market data, liquidity analysis, trading patterns, and risk factors.
 
-ADDRESS: ${address}
+When analyzing contract-based tokens, always include:
+1. Token identification (name, symbol, type of token)
+2. Supply metrics (total, circulating, holder distribution)
+3. Market valuation (price, market cap, FDV)
+4. Liquidity assessment (depth, distribution across exchanges)
+5. Trading analysis (volume, buy/sell patterns)
+6. Risk considerations (contract features, centralization concerns)
+
+Present data in a clearly structured format with sections and subsections. Use bullet points for key metrics. Highlight notable or concerning metrics. Avoid making price predictions but note any significant market behaviors.`;
+    
+    // Generate user prompt with all available token data
+    const userPrompt = `
+Please provide a comprehensive analysis of the following token contract:
+
+CONTRACT ADDRESS: ${address}
+BLOCKCHAIN: ${blockchain}
 
 ${dexData && dexData.dexScreenerData ? `DEX DATA:
 ${JSON.stringify(dexData.dexScreenerData, null, 2)}` : 'No DEX data available for this contract.'}
@@ -232,33 +244,84 @@ ${JSON.stringify(dexData.dexScreenerData, null, 2)}` : 'No DEX data available fo
 ${dexData && dexData.coinGeckoData ? `TOKEN DATA:
 ${JSON.stringify(dexData.coinGeckoData, null, 2)}` : 'No CoinGecko data available for this contract.'}
 
-Based on the available data, provide a detailed analysis of this contract, focusing on:
-1. Token identification (if possible)
-2. Liquidity assessment
-3. Trading patterns and volume analysis
-4. Security considerations
-5. Key metrics worth noting
+${onChainData ? `ON-CHAIN DATA:
+${JSON.stringify(onChainData, null, 2)}` : 'No additional on-chain data available.'}
 
-Keep your analysis fact-based and data-driven. Mention any limitations in the data provided.
+Based on all available data, provide a comprehensive token analysis with the following sections:
+
+1. TOKEN BASICS
+   - Name, symbol, token type
+   - Contract creation date (if available)
+   - Token standard (e.g., ERC-20, SPL, BEP-20)
+
+2. SUPPLY METRICS
+   - Total supply
+   - Circulating supply
+   - Max supply (if applicable)
+   - Burn mechanics (if any)
+   - Holder distribution (concentration)
+
+3. MARKET DATA
+   - Current price
+   - Market capitalization
+   - Fully diluted valuation
+   - Price change (24h, 7d if available)
+   - All-time high/low (if available)
+
+4. LIQUIDITY ANALYSIS
+   - Total liquidity across exchanges
+   - Main trading pairs
+   - Liquidity depth
+   - Slippage estimates for different trade sizes
+
+5. TRADING METRICS
+   - 24h volume
+   - Buy/sell ratio
+   - Volume distribution across exchanges
+   - Notable trading patterns
+
+6. RISK ASSESSMENT
+   - Contract verification status
+   - Owner privileges (if identified)
+   - Centralization concerns
+   - Unusual contract functions (if any)
+   - Other risk factors
+
+7. NOTEWORTHY OBSERVATIONS
+   - Any unusual or significant metrics
+   - Recent developments or news (if available)
+   - Comparison to similar tokens (if data available)
+
+FORMAT THE RESPONSE WITH CLEAR SECTION HEADERS AND BULLET POINTS FOR KEY METRICS.
 The user's original question was: "${userMessage}"
 `;
 
-    // Get the analysis from OpenAI
-    const contractAnalysis = await getAIAnalysis(systemPrompt, userPrompt);
+    // Get the detailed analysis from OpenAI
+    const aiResponse = await OPENAI_CONFIG.createChatCompletion([
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt }
+    ], {
+      temperature: 0.2, // Lower temperature for more factual analysis
+      maxTokens: 1500, // Larger response for detailed token analysis
+    });
     
+    // Structure the final response
     return {
-      content: contractAnalysis,
-      analysisType: 'contract',
+      content: aiResponse.choices[0].message.content,
+      analysisType: 'tokenContract',
       contractAddress: address,
       blockchain,
-      rawData: dexData
+      rawData: {
+        dexData,
+        onChainData
+      }
     };
   } catch (error) {
     console.error('Error in contract analysis:', error);
     
     // Fallback to standard AI
     return {
-      content: `I encountered an issue analyzing that contract address: ${error.message}. Let me provide a standard response instead.\n\n${await processWithStandardAI(userMessage, chatHistory, true)}`,
+      content: `I encountered an issue analyzing that contract address: ${error.message}. Let me provide a basic response instead.\n\n${await processWithStandardAI(userMessage, chatHistory, true)}`,
       error: true,
       errorMessage: error.message
     };
@@ -322,10 +385,16 @@ Structure your response with clear sections for easy reading. The user's origina
 `;
 
     // Get the comparison from OpenAI
-    const comparisonAnalysis = await getAIAnalysis(systemPrompt, userPrompt);
+    const comparisonResponse = await OPENAI_CONFIG.createChatCompletion([
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt }
+    ], {
+      temperature: 0.3,
+      maxTokens: 1500
+    });
     
     return {
-      content: comparisonAnalysis,
+      content: comparisonResponse.choices[0].message.content,
       analysisType: 'comparison',
       tokens: tokensToCompare,
       rawData: tokensData
@@ -339,60 +408,6 @@ Structure your response with clear sections for easy reading. The user's origina
       error: true,
       errorMessage: error.message
     };
-  }
-};
-
-/**
- * Get AI analysis from OpenAI
- * @param {string} systemPrompt - System prompt
- * @param {string} userPrompt - User prompt
- * @returns {Promise<string>} - AI analysis
- */
-const getAIAnalysis = async (systemPrompt, userPrompt) => {
-  // Check if OpenAI API key is available
-  if (!OPENAI_API_KEY) {
-    throw new Error('OpenAI API key not available');
-  }
-  
-  try {
-    // Make the API request
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${OPENAI_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: "gpt-3.5-turbo", // Can use gpt-4 if available
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt }
-        ],
-        temperature: 0.2, // Lower temperature for more factual analysis
-        max_tokens: 1500, // Larger response for detailed analysis
-      })
-    });
-
-    // Check for HTTP errors
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('OpenAI API HTTP error:', response.status, errorText);
-      throw new Error(`HTTP error ${response.status}: ${errorText}`);
-    }
-
-    const data = await response.json();
-    
-    // Check for errors in the response
-    if (data.error) {
-      console.error('OpenAI API error details:', JSON.stringify(data.error, null, 2));
-      throw new Error(data.error.message || 'Unknown API error');
-    }
-
-    // Return the AI response
-    return data.choices[0].message.content;
-  } catch (error) {
-    console.error('Error getting AI analysis:', error);
-    throw error;
   }
 };
 
@@ -727,5 +742,30 @@ Provide an opportunity analysis with these sections:
 Do not make price predictions or give financial advice. Separate facts from interpretations and note data limitations. Be concise but thorough, focusing on the most relevant insights for this analysis type.`;
   
   return `${basePrompt}${typeSpecificInstructions[analysisType] || ''}${commonInstructions}`;
+};
+
+/**
+ * Get a default response when API is unavailable
+ * @param {string} message - User message
+ * @returns {string} - Default response
+ */
+const getDefaultResponse = (message) => {
+  const lowerMessage = message.toLowerCase();
+  
+  // Crypto-specific fallback responses
+  if (lowerMessage.includes('bitcoin') || lowerMessage.includes('btc')) {
+    return "Based on available data, Bitcoin remains the largest cryptocurrency by market capitalization, with its fixed supply of 21 million coins serving as a key value proposition. While I can't access real-time data at the moment, it's worth monitoring Bitcoin's hash rate, active addresses, and exchange outflows as key indicators of network health and market sentiment.";
+  }
+  
+  if (lowerMessage.includes('ethereum') || lowerMessage.includes('eth')) {
+    return "Ethereum continues to be the leading smart contract platform, with significant network effects through its developer ecosystem and dApp infrastructure. The transition to Proof of Stake has substantially altered its economic model by reducing issuance and introducing potential deflationary pressure during high network activity. Layer-2 scaling solutions are important to monitor for addressing throughput limitations.";
+  }
+  
+  if (lowerMessage.includes('solana') || lowerMessage.includes('sol')) {
+    return "Solana's architecture emphasizes high throughput and low transaction costs through its unique Proof of History consensus mechanism. While this approach provides performance advantages, it creates different trade-offs regarding decentralization and reliability compared to other L1 blockchains. Network performance and validator distribution are key metrics to evaluate its long-term prospects.";
+  }
+  
+  // General crypto fallback
+  return "Based on my analysis, cryptocurrency markets demonstrate distinctive characteristics including 24/7 trading, cyclical patterns, and significant volatility compared to traditional assets. Evaluating projects requires examining multiple factors including tokenomics, utility, development activity, and adoption metrics beyond simple price action. Without access to current data, I'd recommend focusing on fundamental value drivers rather than short-term price movements. Would you like me to elaborate on specific analytical frameworks for crypto evaluation?";
 };
 

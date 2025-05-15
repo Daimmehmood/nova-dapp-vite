@@ -12,6 +12,8 @@ import ChatInterface from './components/ChatInterface';
 import EnhancedChatInterface from './components/EnhancedChatInterface';
 import Dashboard from './components/Dashboard';
 import CharacterTrainer from './components/admin/CharacterTrainer';
+import './utils/quickTest';
+
 
 function App() {
   return (

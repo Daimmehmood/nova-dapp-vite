@@ -4,6 +4,11 @@
  * to fetch cryptocurrency data for enhanced analysis
  */
 
+import { apiRateLimiter } from '../utils/apiRateLimiter';
+import { tokenDataCache, marketDataCache, searchResultsCache } from '../utils/apiCache';
+
+
+
 // Constants for API endpoints
 const COINGECKO_API_BASE = 'https://api.coingecko.com/api/v3';
 const DEXSCREENER_API_BASE = 'https://api.dexscreener.com/latest';
@@ -18,17 +23,141 @@ const DEXSCREENER_API_BASE = 'https://api.dexscreener.com/latest';
  */
 export const fetchTokenDataFromCoinGecko = async (tokenId) => {
   try {
-    const response = await fetch(`${COINGECKO_API_BASE}/coins/${tokenId}?localization=false&tickers=true&market_data=true&community_data=true&developer_data=true&sparkline=true`);
-    
-    if (!response.ok) {
-      throw new Error(`CoinGecko API error: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    return data;
+    return await apiRateLimiter.throttleRequest('coinGecko', async () => {
+      const response = await fetch(`${COINGECKO_API_BASE}/coins/${tokenId}?localization=false&tickers=true&market_data=true&community_data=true&developer_data=true&sparkline=true`);
+      
+      if (!response.ok) {
+        throw new Error(`CoinGecko API error: ${response.status}`);
+      }
+      
+      return await response.json();
+    });
   } catch (error) {
     console.error('Error fetching from CoinGecko:', error);
     throw error;
+  }
+};
+
+// src/services/cryptoApiService.js - add this new function
+
+/**
+ * Get detailed on-chain data for a token contract
+ * @param {string} address - Contract address
+ * @param {string} blockchain - Blockchain (ethereum, solana, etc.)
+ * @returns {Promise<Object>} - On-chain token data
+ */
+export const getTokenOnChainData = async (address, blockchain = 'ethereum') => {
+  try {
+    let apiEndpoint;
+    let apiKey;
+    
+    // Configure API based on blockchain
+    switch(blockchain.toLowerCase()) {
+      case 'ethereum':
+        apiEndpoint = `https://api.etherscan.io/api?module=token&action=tokeninfo&contractaddress=${address}`;
+        apiKey = import.meta.env.VITE_ETHERSCAN_API_KEY;
+        if (apiKey) apiEndpoint += `&apikey=${apiKey}`;
+        break;
+      case 'binance':
+      case 'bsc':
+        apiEndpoint = `https://api.bscscan.com/api?module=token&action=tokeninfo&contractaddress=${address}`;
+        apiKey = import.meta.env.VITE_BSCSCAN_API_KEY;
+        if (apiKey) apiEndpoint += `&apikey=${apiKey}`;
+        break;
+      case 'solana':
+        // For Solana, we would use a different approach with Solana's SPL token program
+        apiEndpoint = `https://public-api.solscan.io/token/meta?tokenAddress=${address}`;
+        break;
+      default:
+        throw new Error(`Blockchain ${blockchain} not supported for on-chain data`);
+    }
+    
+    // Fetch data from the API
+    const response = await fetch(apiEndpoint);
+    
+    if (!response.ok) {
+      throw new Error(`Explorer API error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    // Process and normalize the data based on blockchain
+    return formatOnChainData(data, blockchain);
+  } catch (error) {
+    console.error(`Error fetching on-chain data for ${blockchain}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Format and normalize on-chain data from different blockchains
+ * @param {Object} data - Raw API response
+ * @param {string} blockchain - Blockchain type
+ * @returns {Object} - Formatted data
+ */
+const formatOnChainData = (data, blockchain) => {
+  // This will normalize data from different blockchain explorers
+  // into a consistent format
+  
+  switch(blockchain.toLowerCase()) {
+    case 'ethereum':
+      // Format Etherscan data
+      if (data.status !== '1' || !data.result) {
+        return null;
+      }
+      
+      return {
+        name: data.result.name || 'Unknown',
+        symbol: data.result.symbol || 'Unknown',
+        decimals: parseInt(data.result.divisor || '18', 10),
+        totalSupply: data.result.totalSupply,
+        contractCreator: data.result.contractCreator,
+        creationTimestamp: data.result.creationTimestamp,
+        tokenType: 'ERC-20',
+        isVerified: data.result.isVerified === '1',
+        holderCount: data.result.holderCount || 'Unknown',
+        source: 'Etherscan'
+      };
+      
+    case 'binance':
+    case 'bsc':
+      // Format BSCScan data (similar to Etherscan)
+      if (data.status !== '1' || !data.result) {
+        return null;
+      }
+      
+      return {
+        name: data.result.name || 'Unknown',
+        symbol: data.result.symbol || 'Unknown',
+        decimals: parseInt(data.result.divisor || '18', 10),
+        totalSupply: data.result.totalSupply,
+        contractCreator: data.result.contractCreator,
+        creationTimestamp: data.result.creationTimestamp,
+        tokenType: 'BEP-20',
+        isVerified: data.result.isVerified === '1',
+        holderCount: data.result.holderCount || 'Unknown',
+        source: 'BSCScan'
+      };
+      
+    case 'solana':
+      // Format Solscan data
+      if (!data || data.error) {
+        return null;
+      }
+      
+      return {
+        name: data.name || 'Unknown',
+        symbol: data.symbol || 'Unknown',
+        decimals: data.decimals || 9,
+        totalSupply: data.supply,
+        tokenType: 'SPL',
+        isVerified: data.tags?.includes('verified') || false,
+        holderCount: data.holder || 'Unknown',
+        source: 'Solscan'
+      };
+      
+    default:
+      return null;
   }
 };
 
@@ -103,14 +232,15 @@ export const getGlobalMarketData = async () => {
  */
 export const searchDexScreener = async (query) => {
   try {
-    const response = await fetch(`${DEXSCREENER_API_BASE}/dex/search?q=${encodeURIComponent(query)}`);
-    
-    if (!response.ok) {
-      throw new Error(`DexScreener API error: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    return data;
+    return await apiRateLimiter.throttleRequest('dexScreener', async () => {
+      const response = await fetch(`${DEXSCREENER_API_BASE}/dex/search?q=${encodeURIComponent(query)}`);
+      
+      if (!response.ok) {
+        throw new Error(`DexScreener API error: ${response.status}`);
+      }
+      
+      return await response.json();
+    });
   } catch (error) {
     console.error('Error searching on DexScreener:', error);
     throw error;
@@ -308,7 +438,16 @@ export const formatDexDataForAnalysis = (dexData) => {
  * @returns {Promise<Object>} - Comprehensive analysis data
  */
 export const getComprehensiveTokenAnalysis = async (tokenQuery) => {
-  try {
+  // Create a cache key
+  const cacheKey = `token:${tokenQuery.toLowerCase()}`;
+  
+  // Check cache first
+  const cachedData = tokenDataCache.get(cacheKey);
+  if (cachedData) {
+    console.log(`Using cached data for ${tokenQuery}`);
+    return cachedData;
+  } 
+   try {
     // Step 1: Search for the token on CoinGecko
     const searchResults = await searchTokensOnCoinGecko(tokenQuery);
     

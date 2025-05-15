@@ -432,7 +432,6 @@ const HomePage = () => {
   AI-Powered Crypto Analysis
 </Subtitle>
 
-// Update the CTAButtons section in the Hero
 <CTAButtons
   initial={{ opacity: 0, y: 20 }}
   animate={{ opacity: 1, y: 0 }}
@@ -465,14 +464,7 @@ const HomePage = () => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.6 }}
           >
-            <StyledButton 
-              large 
-              onClick={() => navigate('/agents')}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.98 }}
-            >
-              Meet the Agents
-            </StyledButton>
+            
             
             <StyledButton 
               secondary

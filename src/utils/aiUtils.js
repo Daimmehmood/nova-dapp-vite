@@ -372,26 +372,82 @@ export const processNovaMessage = async (userMessage, chatHistory = []) => {
 };
 
 // Function to detect if a string contains a potential crypto contract address
+/**
+ * Improved function to detect if a string contains a crypto contract address
+ * @param {string} text - Text to analyze
+ * @returns {Object|null} - Detected contract addresses by blockchain
+ */
 export const detectContractAddress = (text) => {
-  // Basic regex patterns for different blockchain addresses
+  if (!text) return null;
+  
+  // Enhanced patterns for different blockchain addresses
   const patterns = {
-    ethereum: /0x[a-fA-F0-9]{40}/g,
-    solana: /[1-9A-HJ-NP-Za-km-z]{32,44}/g,
-    binance: /bnb[a-zA-Z0-9]{39}/i,
-    polkadot: /1[a-zA-Z0-9]{47}/g,
-    // Add more blockchain address patterns as needed
+    ethereum: /0x[a-fA-F0-9]{40}\b/g, // ETH, more specific with word boundary
+    solana: /[1-9A-HJ-NP-Za-km-z]{32,44}\b/g, // SOL
+    binance: /0x[a-fA-F0-9]{40}\b/g, // BSC (uses same format as ETH)
+    polygon: /0x[a-fA-F0-9]{40}\b/g, // Polygon (uses same format as ETH)
+    avalanche: /0x[a-fA-F0-9]{40}\b/g, // AVAX C-Chain (uses same format as ETH)
+    fantom: /0x[a-fA-F0-9]{40}\b/g, // FTM (uses same format as ETH)
   };
   
-  let foundAddresses = {};
+  // Additional context patterns to improve detection accuracy
+  const contractContexts = [
+    'contract', 'address', 'token', 'CA', 'contract address', 
+    'token address', 'smart contract', 'check', 'analyze', 'scan'
+  ];
   
+  let foundAddresses = {};
+  let hasContractContext = false;
+  
+  // Check if any contract context words are present
+  hasContractContext = contractContexts.some(context => 
+    text.toLowerCase().includes(context.toLowerCase())
+  );
+  
+  // First pass: find all potential addresses
   for (const [blockchain, pattern] of Object.entries(patterns)) {
     const matches = text.match(pattern);
-    if (matches) {
-      foundAddresses[blockchain] = matches;
+    if (matches && matches.length > 0) {
+      // Filter out duplicates
+      const uniqueMatches = [...new Set(matches)];
+      foundAddresses[blockchain] = uniqueMatches;
     }
   }
   
-  return Object.keys(foundAddresses).length > 0 ? foundAddresses : null;
+  // If no blockchain context words and detecting ETH/BSC/etc addresses,
+  // we need to disambiguate which chain the contract is on
+  if (Object.keys(foundAddresses).length > 0) {
+    // Look for blockchain name mentions to disambiguate
+    const blockchainNames = {
+      'ethereum': ['ethereum', 'eth', 'ether'],
+      'binance': ['binance', 'bsc', 'bnb'],
+      'polygon': ['polygon', 'matic'],
+      'avalanche': ['avalanche', 'avax'],
+      'solana': ['solana', 'sol'],
+      'fantom': ['fantom', 'ftm']
+    };
+    
+    // Check for blockchain name mentions
+    for (const [chain, keywords] of Object.entries(blockchainNames)) {
+      if (keywords.some(keyword => text.toLowerCase().includes(keyword))) {
+        // If specific blockchain is mentioned and we have addresses in common format,
+        // prioritize that blockchain for the addresses
+        if (foundAddresses.ethereum && (chain !== 'ethereum' && ['binance', 'polygon', 'avalanche', 'fantom'].includes(chain))) {
+          // Move addresses from ethereum to the specific chain
+          foundAddresses[chain] = foundAddresses.ethereum;
+          delete foundAddresses.ethereum;
+        }
+      }
+    }
+  }
+  
+  // If we have addresses and contract context, or very likely address patterns, return them
+  if ((Object.keys(foundAddresses).length > 0 && hasContractContext) || 
+      (Object.keys(foundAddresses).length > 0 && text.includes('0x'))) {
+    return foundAddresses;
+  }
+  
+  return null;
 };
 
 // Function for contract address analysis

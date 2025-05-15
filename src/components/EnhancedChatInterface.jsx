@@ -19,6 +19,12 @@ import {
 import { useCharacter } from '../context/CharacterContext';
 import { processNovaEnhancedMessage } from '../services/novaAIService';
 import useCryptoAnalysis from '../hooks/useCryptoAnalysis';
+import { 
+  ApiErrorMessage, 
+  DataErrorMessage, 
+  RateLimitErrorMessage, 
+  AuthErrorMessage 
+} from './ErrorStates';
 
 // Reuse the styled components from ChatInterface.jsx
 const ChatContainer = styled.div`
@@ -397,24 +403,31 @@ const EnhancedChatInterface = () => {
     }
   }, [messages, isTyping, shouldAutoScroll]);
   
-  // Process message with Enhanced Nova AI
+  
+  
+  const [apiError, setApiError] = useState(null);
+const [errorType, setErrorType] = useState(null);
+
+// Process message with Enhanced Nova AI
   const handleSendMessage = async () => {
-    if (!input.trim() || !character || !isAuthorized || isProcessing) return;
+  if (!input.trim() || !character || !isAuthorized || isProcessing) return;
+  
+  setIsProcessing(true);
+  setApiError(null);
+  setErrorType(null);
+  
+  // Add user message
+  const userMessage = {
+    id: Date.now(),
+    content: input.trim(),
+    sender: 'You',
+    isUser: true,
+    time: formatTime()
+  };
     
-    setIsProcessing(true); // Prevent double submissions
-    
-    // Add user message
-    const userMessage = {
-      id: Date.now(),
-      content: input.trim(),
-      sender: 'You',
-      isUser: true,
-      time: formatTime()
-    };
-    
-    setMessages(prev => [...prev, userMessage]);
-    setInput('');
-    setIsTyping(true);
+      setMessages(prev => [...prev, userMessage]);
+  setInput('');
+  setIsTyping(true);
     
     // Format chat history for AI
     const chatHistory = messages.map(msg => ({
@@ -424,21 +437,21 @@ const EnhancedChatInterface = () => {
     
     try {
       // Process with enhanced Nova AI
-      const aiResponse = await processNovaEnhancedMessage(input, chatHistory);
-      
+const aiResponse = await processNovaEnhancedMessage(input, chatHistory);
+
       // Add response message
-      const novaMessage = {
-        id: Date.now() + 1,
-        content: aiResponse.content,
-        sender: 'Nova',
-        isUser: false,
-        time: formatTime(),
-        analysisType: aiResponse.analysisType,
-        token: aiResponse.token,
-        rawData: aiResponse.rawData
-      };
-      
-      setMessages(prev => [...prev, novaMessage]);
+    const novaMessage = {
+      id: Date.now() + 1,
+      content: aiResponse.content,
+      sender: 'Nova',
+      isUser: false,
+      time: formatTime(),
+      analysisType: aiResponse.analysisType,
+      token: aiResponse.token,
+      rawData: aiResponse.rawData
+    };
+    
+    setMessages(prev => [...prev, novaMessage]);
       
       // If we have token data, update suggestions for quick actions
       if (aiResponse.token) {
@@ -451,16 +464,29 @@ const EnhancedChatInterface = () => {
       }
     } catch (error) {
       console.error('Error generating Nova response:', error);
+
+       // Determine error type
+    if (error.message?.includes('rate limit')) {
+      setErrorType('rateLimit');
+    } else if (error.message?.includes('auth') || error.message?.includes('key')) {
+      setErrorType('auth');
+    } else if (error.message?.includes('not found') || error.message?.includes('parsing')) {
+      setErrorType('data');
+    } else {
+      setErrorType('api');
+    }
+    
+    setApiError(error);
       
-      // Add error message
-      const errorMessage = {
-        id: Date.now() + 1,
-        content: `I'm sorry, I encountered an issue while analyzing your request: ${error.message}. Please try again with a different query.`,
-        sender: 'Nova',
-        isUser: false,
-        time: formatTime(),
-        error: true
-      };
+       // Add error message
+    const errorMessage = {
+      id: Date.now() + 1,
+      content: `I'm sorry, I encountered an issue while analyzing your request.`,
+      sender: 'Nova',
+      isUser: false,
+      time: formatTime(),
+      error: true
+    };
       
       setMessages(prev => [...prev, errorMessage]);
     } finally {
@@ -668,6 +694,43 @@ const EnhancedChatInterface = () => {
               </MessageContent>
             </MessageBubble>
           ))}
+
+           {/* Add error messages */}
+        {apiError && errorType === 'api' && (
+          <ApiErrorMessage 
+            error={apiError} 
+            onRetry={() => {
+              if (input.trim()) handleSendMessage();
+            }} 
+          />
+        )}
+
+         {apiError && errorType === 'data' && (
+          <DataErrorMessage 
+            error={apiError} 
+            onRetry={() => {
+              if (input.trim()) handleSendMessage();
+            }} 
+          />
+        )}
+        
+        {apiError && errorType === 'rateLimit' && (
+          <RateLimitErrorMessage 
+            retryTime={30000} 
+            onRetry={() => {
+              if (input.trim()) handleSendMessage();
+            }} 
+          />
+        )}
+        
+        {apiError && errorType === 'auth' && (
+          <AuthErrorMessage 
+            error={apiError} 
+            onRetry={() => {
+              if (input.trim()) handleSendMessage();
+            }} 
+          />
+        )}
           
           {isTyping && (
             <TypingIndicator
