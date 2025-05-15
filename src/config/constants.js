@@ -1,0 +1,37 @@
+// src/config/constants.js
+// Replace this with your actual OpenAI API key
+export const OPENAI_API_KEY = "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";
+
+// Character-specific configuration
+export const CHARACTER_CONFIG = {
+  nova: {
+    aiTemperature: 0.3,  // More focused, analytical responses
+    responseStyle: "analytical",
+    topicFocus: "data-driven analysis",
+    defaultPrompt: "I'm Nova, your Logic-Driven Analyst. How can I help you with crypto analysis today?"
+  },
+  luna: {
+    aiTemperature: 0.7,  // More creative responses
+    responseStyle: "innovative",
+    topicFocus: "creative investment strategies",
+    defaultPrompt: "Luna here! I'm excited to explore creative crypto opportunities with you. What unique possibilities shall we discover today?"
+  },
+  vega: {
+    aiTemperature: 0.4, 
+    responseStyle: "technical",
+    topicFocus: "chart patterns and indicators",
+    defaultPrompt: "Vega online. Ready to analyze technical patterns and market indicators. What charts would you like me to examine?"
+  },
+  ember: {
+    aiTemperature: 0.5,
+    responseStyle: "protective",
+    topicFocus: "risk management",
+    defaultPrompt: "This is Ember, your protective guardian. I'm here to help you navigate crypto risks safely. What concerns can I address for you?"
+  },
+  astra: {
+    aiTemperature: 0.8, // Higher temperature for more varied, speculative responses
+    responseStyle: "visionary",
+    topicFocus: "high-risk opportunities",
+    defaultPrompt: "Astra activated! Ready to spot those high-risk, high-reward opportunities most would miss. What moonshot are we hunting today?"
+  }
+};
