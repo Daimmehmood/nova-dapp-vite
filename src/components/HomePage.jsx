@@ -9,6 +9,8 @@ import lunaImage from '../assets/characters/luna/Luna3.jpg';
 import vegaImage from '../assets/characters/vega/Vega3.jpg';
 import emberImage from '../assets/characters/ember/Ember.jpg';
 import astraImage from '../assets/characters/astra/Astra2.jpg';
+import { FaStar, FaBolt } from 'react-icons/fa';
+
 
 const HomeContainer = styled.div`
   min-height: 100vh;
@@ -93,9 +95,10 @@ const CTAButtons = styled(motion.div)`
 `;
 
 // Styling for button since we're not importing the Button component
+// Update the StyledButton component to add icon support
 const StyledButton = styled(motion.button)`
   padding: ${props => props.large ? '1rem 2rem' : '0.75rem 1.5rem'};
-  background: ${props => props.secondary ? 'transparent' : props.theme.gradients.orangeYellow};
+  background: ${props => props.secondary ? 'transparent' : props.primary ? 'linear-gradient(45deg, #FF9933 0%, #FFCC33 100%)' : props.theme.gradients.orangeYellow};
   color: ${props => props.secondary ? props.theme.colors.primaryOrange : props.theme.colors.primaryBlack};
   font-family: ${({ theme }) => theme.fonts.heading};
   font-weight: 600;
@@ -105,6 +108,9 @@ const StyledButton = styled(motion.button)`
   border-radius: ${({ theme }) => theme.borderRadius.md};
   cursor: pointer;
   transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   
   ${props => props.secondary && `
     border: 1px solid ${props.theme.colors.primaryOrange};
@@ -300,6 +306,47 @@ const SectionCTA = styled.div`
   margin-top: 3rem;
 `;
 
+const NewFeatureBadge = styled.div`
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  background: linear-gradient(45deg, #FF9933 0%, #FFCC33 100%);
+  color: black;
+  font-weight: bold;
+  padding: 0.25rem 0.6rem;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  z-index: 10;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+`;
+
+// Add this to EnhancedNovaSection
+const EnhancedNovaSection = styled.section`
+  width: 100%;
+  padding: 2rem 1.5rem 6rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, rgba(10, 10, 15, 0) 0%, rgba(10, 10, 15, 0.7) 100%);
+  position: relative;
+  
+  &:before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent 0%, rgba(255, 153, 51, 0.5) 50%, transparent 100%);
+  }
+`;
+
+
+
 const HomePage = () => {
   const navigate = useNavigate();
   
@@ -368,14 +415,50 @@ const HomePage = () => {
           </Subtitle>
           
           <Description
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.8, delay: 0.4 }}
-          >
-            Explore the digital metropolis where AI companions guide you through the world of DeFi.
-            Each AI agent has unique abilities to help you navigate token analysis, market predictions,
-            and investment strategies.
-          </Description>
+  initial={{ opacity: 0 }}
+  animate={{ opacity: 1 }}
+  transition={{ duration: 0.8, delay: 0.4 }}
+>
+  Explore the digital metropolis where AI companions guide you through the world of crypto.
+  Our enhanced Nova AI now connects to CoinGecko and DexScreener for real-time data and 
+  powerful analysis of any cryptocurrency or token.
+</Description>
+
+<Subtitle
+  initial={{ opacity: 0 }}
+  animate={{ opacity: 1 }}
+  transition={{ duration: 0.8, delay: 0.2 }}
+>
+  AI-Powered Crypto Analysis
+</Subtitle>
+
+// Update the CTAButtons section in the Hero
+<CTAButtons
+  initial={{ opacity: 0, y: 20 }}
+  animate={{ opacity: 1, y: 0 }}
+  transition={{ duration: 0.8, delay: 0.6 }}
+>
+  <StyledButton 
+    large 
+    onClick={() => navigate('/agents')}
+    whileHover={{ scale: 1.05 }}
+    whileTap={{ scale: 0.98 }}
+  >
+    <FaRobot /> Meet the Agents
+  </StyledButton>
+  
+  <StyledButton 
+    primary
+    large
+    onClick={() => navigate('/enhanced/nova')}
+    whileHover={{ scale: 1.05 }}
+    whileTap={{ scale: 0.98 }}
+    style={{ position: 'relative' }}
+  >
+    <FaChartLine /> Try Enhanced Nova
+    <NewFeatureBadge><FaStar /> NEW</NewFeatureBadge>
+  </StyledButton>
+</CTAButtons>
           
           <CTAButtons
             initial={{ opacity: 0, y: 20 }}
@@ -409,20 +492,22 @@ const HomePage = () => {
         
         <FeaturesGrid>
           <FeatureCard
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-            viewport={{ once: true }}
-          >
-            <FeatureIconWrapper>
-              <FaRobot />
-            </FeatureIconWrapper>
-            <FeatureTitle>AI Companions</FeatureTitle>
-            <FeatureDescription>
-              Interact with 5 unique AI characters, each specializing in different aspects of crypto analysis.
-              Unlock new characters as you gain experience.
-            </FeatureDescription>
-          </FeatureCard>
+  initial={{ opacity: 0, y: 30 }}
+  whileInView={{ opacity: 1, y: 0 }}
+  transition={{ duration: 0.6, delay: 0.2 }}
+  viewport={{ once: true }}
+  style={{ position: 'relative' }}
+>
+  <NewFeatureBadge><FaBolt /> NEW</NewFeatureBadge>
+  <FeatureIconWrapper>
+    <FaChartLine />
+  </FeatureIconWrapper>
+  <FeatureTitle>Live Market Data</FeatureTitle>
+  <FeatureDescription>
+    Access real-time cryptocurrency data from CoinGecko and DexScreener APIs.
+    Get current prices, market caps, trading volumes, and liquidity metrics.
+  </FeatureDescription>
+</FeatureCard>
           
           <FeatureCard
             initial={{ opacity: 0, y: 30 }}
@@ -463,27 +548,29 @@ const HomePage = () => {
         
         <AgentsGrid>
           {agentShowcase.map((agent, index) => (
-            <AgentCard
-              key={agent.id}
-              color={agent.color}
-              initial={{ opacity: 0, y: 30 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: index * 0.1 }}
-              viewport={{ once: true }}
-              whileHover={{ y: -5 }}
-              onClick={() => navigate(`/character/${agent.id}`)}
-            >
-              <AgentImageContainer>
-                <img src={agent.image} alt={agent.name} />
-              </AgentImageContainer>
-              
-              <AgentInfo>
-                <AgentName color={agent.color}>{agent.name}</AgentName>
-                <AgentTitle>{agent.title}</AgentTitle>
-                <AgentDescription>{agent.description}</AgentDescription>
-              </AgentInfo>
-            </AgentCard>
-          ))}
+  <AgentCard
+    key={agent.id}
+    color={agent.color}
+    initial={{ opacity: 0, y: 30 }}
+    whileInView={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.5, delay: index * 0.1 }}
+    viewport={{ once: true }}
+    whileHover={{ y: -5 }}
+    onClick={() => navigate(`/character/${agent.id}`)}
+    style={{ position: 'relative' }}
+  >
+    {agent.id === 'nova' && <NewFeatureBadge><FaStar /> ENHANCED</NewFeatureBadge>}
+    <AgentImageContainer>
+      <img src={agent.image} alt={agent.name} />
+    </AgentImageContainer>
+    
+    <AgentInfo>
+      <AgentName color={agent.color}>{agent.name}</AgentName>
+      <AgentTitle>{agent.title}</AgentTitle>
+      <AgentDescription>{agent.description}</AgentDescription>
+    </AgentInfo>
+  </AgentCard>
+))};
         </AgentsGrid>
         
         <SectionCTA>
